@@ -1,0 +1,235 @@
+#include <stdint.h>
+#include <stdbool.h>
+#include "15348.h"
+#include "time.h"
+#include "serial.h"
+
+void PLLInit()
+{
+    SYSCTL_RCC2_R |= 0x80000000;
+    SYSCTL_RCC2_R |= 0x00000800;
+    SYSCTL_RCC_R = (SYSCTL_RCC_R & ~0x000007C0) + 0x00000540;
+    SYSCTL_RCC2_R &= ~0x00000070;
+    SYSCTL_RCC2_R &= ~0x00002000;
+    SYSCTL_RCC2_R |= 0x40000000;
+    SYSCTL_RCC2_R = (SYSCTL_RCC2_R & ~0x1FC00000) + (4 << 22);
+    while ((SYSCTL_RIS_R &0x00000040)==0){};
+    SYSCTL_RCC2_R &= ~0x00000800;
+}
+
+
+void PortE_Init(void)
+{
+    volatile unsigned long delay;
+    SYSCTL_RCGC2_R |= 0x00000010;     // 1) E clock
+    delay = SYSCTL_RCGC2_R; // reading register adds a delay, which we might need
+    GPIO_PORTE_LOCK_R = 0x4C4F434B;   // 2) unlock PortF PE0
+    GPIO_PORTE_CR_R = 0x10;           // 3) allow changes to PE4
+    GPIO_PORTE_AMSEL_R = 0x00;        // 4) disable analog function
+    GPIO_PORTE_AFSEL_R = 0x00;        // 5) no alternate function
+    GPIO_PORTE_PCTL_R = 0x00;         // 6) GPIO clear bit PCTL
+    GPIO_PORTE_PUR_R = 0x10;          // 7) enable pullup resistors on PE4
+    GPIO_PORTE_DEN_R = 0x10;          // 8) enable digital pin PE4
+    GPIO_PORTE_DIR_R = 0x10;          // 9) PE4 output
+}
+
+// -----------------X Direction --------------------- //
+//---------------- PB5-ADC0-Seq3 ---------------------//
+void ADC0_InitSWTriggerSeq3_Ch11(void){
+    SYSCTL_RCGCGPIO_R |= 0x02; // 1) activate clock for Port B
+    while((SYSCTL_PRGPIO_R&0x10) == 0){};
+    GPIO_PORTB_DIR_R &= ~0x20; // 2) make PB5 input
+    GPIO_PORTB_AFSEL_R |= 0x20; // 3) enable alternate fun on PB5
+    GPIO_PORTB_DEN_R &= ~0x20; // 4) disable digital I/O on PB5
+    GPIO_PORTB_AMSEL_R |= 0x20; // 5) enable analog fun on PB5
+
+    SYSCTL_RCGCADC_R |= 0x01; // 6) activate ADC0
+    uint32_t delay = SYSCTL_RCGCADC_R; // extra time to stabilize
+    delay = SYSCTL_RCGCADC_R; // extra time to stabilize
+    delay = SYSCTL_RCGCADC_R; // extra time to stabilize
+    delay = SYSCTL_RCGCADC_R;
+    ADC0_PC_R = 0x01; // 7) configure for 125K
+    ADC0_SSPRI_R = 0x0123; // 8) Seq 3 is highest priority
+    ADC0_ACTSS_R &= ~0x0008; // 9) disable sample sequencer 3
+    ADC0_EMUX_R &= ~0xF000; // 10) seq3 is software trigger
+    ADC0_SSMUX3_R = (ADC0_SSMUX3_R&0xFFFFFFF0)+11; // 11) Ain11 (PB5)
+    ADC0_SSCTL3_R = 0x0006; // 12) no TS0 D0, yes IE0 END0
+    ADC0_IM_R &= ~0x0008; // 13) disable SS3 interrupts
+    ADC0_ACTSS_R |= 0x0008; // 14) enable sample sequencer 3
+}
+
+
+// -----------------Y Direction --------------------- //
+//---------------- PD3-ADC0-Seq2 ---------------------//
+void ADC0_InitSWTriggerSeq2_Ch4(void){
+    SYSCTL_RCGCGPIO_R |= 0x08; // 1) activate clock for Port D
+    while((SYSCTL_PRGPIO_R&0x10) == 0){};
+    GPIO_PORTD_DIR_R &= ~0x08; // 2) make PD3 input
+    GPIO_PORTD_AFSEL_R |= 0x08; // 3) enable alternate fun on PD3
+    GPIO_PORTD_DEN_R &= ~0x08; // 4) disable digital I/O on PD3
+    GPIO_PORTD_AMSEL_R |= 0x08; // 5) enable analog fun on PD3
+
+    SYSCTL_RCGCADC_R |= 0x01; // 6) activate ADC0
+    uint32_t delay = SYSCTL_RCGCADC_R; // extra time to stabilize
+    delay = SYSCTL_RCGCADC_R; // extra time to stabilize
+    delay = SYSCTL_RCGCADC_R; // extra time to stabilize
+    delay = SYSCTL_RCGCADC_R;
+    ADC0_PC_R = 0x01; // 7) configure for 125K
+    ADC0_SSPRI_R = 0x0123; // 8) Seq 3 is highest priority
+    ADC0_ACTSS_R &= ~0x0004; // 9) disable sample sequencer 2
+    ADC0_EMUX_R &= ~0x0F00; // 10) seq2 is software trigger
+    ADC0_SSMUX2_R = (ADC0_SSMUX2_R&0xFFFFFFF0)+4; // 11) Ain4 (PD3)
+    ADC0_SSCTL2_R = 0x0006; // 12) no TS0 D0, yes IE0 END0
+    ADC0_IM_R &= ~0x0008; // 13) disable SS3 interrupts
+    ADC0_ACTSS_R |= 0x0004; // 14) enable sample sequencer 2
+}
+
+
+
+//------------ADC_InSeq3------------
+// Busy-wait analog to digital conversion
+// Input: none
+// Output: 12-bit result of ADC conversion
+ void ADC0_InSeq3(uint32_t* cord_x, uint32_t* cord_y){
+    uint32_t data;
+
+    // Busy wait for seq3
+    ADC0_PSSI_R = 0x0008;
+    while((ADC0_RIS_R&0x08)==0){};
+    data = ADC0_SSFIFO3_R&0xFFF;
+    ADC0_ISC_R = 0x0008;
+    *cord_x = data;
+
+    // Busy wait for seq2
+    ADC0_PSSI_R = 0x0004;
+    while((ADC0_RIS_R&0x04)==0){};
+    data = ADC0_SSFIFO2_R&0xFFF;
+    ADC0_ISC_R = 0x0004;
+    *cord_y = data;
+
+}
+
+ // ------------------UART-7-Init--------------------- //
+ //------------------PE0(Rx)-PE1(Tx)-------------------//
+ void UART7_Init(void){
+     SYSCTL_RCGCUART_R |= 0x80;
+     SYSCTL_RCGCGPIO_R |= 0x10;
+
+     UART7_CTL_R &= ~0x01;
+     UART7_IBRD_R = 520; //130;
+     UART7_FBRD_R = 53; //13;
+     UART7_LCRH_R = 0x0060;
+     UART7_CTL_R |= 0x301;
+
+     GPIO_PORTE_AMSEL_R &= ~0x03;
+     GPIO_PORTE_AFSEL_R |= 0x03;
+     GPIO_PORTE_DEN_R |= 0x03;
+     GPIO_PORTE_PCTL_R = 0x11;
+ }
+
+ char UART7_recv(void){
+     while((UART7_FR_R & 0x10) != 0);
+     return ((char)(UART7_DR_R & 0xFF));
+ }
+
+ void UART7_send_char(char data){
+     while((UART7_FR_R & 0x20) != 0);
+     UART7_DR_R = data;
+ }
+
+ void UART7_send(char* data) {
+     while(*data != '\0') {
+         UART7_send_char(*data++);
+     }
+ }
+
+
+void SysTickInterrupt_Init() {
+    NVIC_ST_CTRL_R = 0;
+    NVIC_ST_RELOAD_R = 0x00442400; // exactly 200 ms
+    NVIC_ST_CURRENT_R = 0;
+    NVIC_ST_CTRL_R = 0x00000007;
+}
+
+int count = 0;
+void SysTick_Handler(void){
+    count++;
+    if(count >= 2){
+        uint32_t cord_x=0, cord_y=0;
+        ADC0_InSeq3(&cord_x, &cord_y);
+
+        char X = 'X';
+        char Y = 'Y';
+
+        if(cord_x > 2700) X = 'R';
+        if(cord_x < 1800) X = 'L';
+
+        if(cord_y > 2700) Y = 'U';
+        if(cord_y < 1800) Y = 'D';
+
+        SerialWrite(&X);
+        SerialWrite(" ");
+        SerialWrite(&Y);
+
+        UART7_send_char(X);
+        UART7_send_char(Y);
+
+        count = 0;
+    }
+}
+
+// Jostick initialization
+void joystick_Init(){
+    PortE_Init();                   // 1) Enable PortE
+    GPIO_PORTE_DATA_R = 0x10;       // 2) Enable joystick PE4
+    ADC0_InitSWTriggerSeq3_Ch11();  // 3) Configure PB5 (X direction) as ADC
+    ADC0_InitSWTriggerSeq2_Ch4();   // 4) Configure PD3 (Y direction) as ADC
+}
+
+
+void configMaster(){
+
+    int state = 0;
+    while(state <= 5){
+        char data[2] = {0,0};
+        switch(state){
+            case 0:
+                UART7_send("AT+ROLE=1\r\n");
+                state = 1;
+                break;
+
+            case 2:
+                UART7_send("AT+CMODE=0\r\n");
+                state = 3;
+                break;
+
+            case 4:
+                UART7_send("AT+BIND=0021,11,01B4D5\r\n");
+                state = 5;
+                break;
+
+            default:
+                data[0] = UART7_recv();
+                SerialWrite(data);
+                state += (data[0] == '\n');
+                break;
+
+        }
+    }
+
+    SerialWriteLine("Protocol Done");
+}
+
+int main(){
+    PLLInit();
+    SetupSerial();
+    SysTickInterrupt_Init();
+    SerialWriteLine("Reset Now");
+
+    joystick_Init();
+
+    UART7_Init();
+    //configMaster();
+
+    return 0;
+}
