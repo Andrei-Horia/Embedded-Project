@@ -33,6 +33,22 @@ void PortE_Init(void)
     GPIO_PORTE_DIR_R = 0x10;          // 9) PE4 output
 }
 
+// PD6-PD7: Button 1/2
+void PortD_Init(void) {
+    volatile unsigned long delay;
+    SYSCTL_RCGC2_R |= 0x00000008;     // 1) D clock
+    delay = SYSCTL_RCGC2_R; // reading register adds a delay, which we might need
+    GPIO_PORTD_LOCK_R = 0x4C4F434B;   // 2) unlock PortD PD0
+    GPIO_PORTD_CR_R = 0xC0;           // 3) allow changes to PD6-PD7
+    GPIO_PORTD_AMSEL_R = 0x00;        // 4) disable analog function
+    GPIO_PORTD_AFSEL_R = 0x00;        // 5) no alternate function
+    GPIO_PORTD_PCTL_R = 0x00;         // 6) GPIO clear bit PCTL
+    GPIO_PORTD_PUR_R = 0xC0;          // 7) enable pullup resistors on PD6-PD7
+    GPIO_PORTD_DEN_R = 0xC0;          // 8) enable digital pin PD6-PD7
+    GPIO_PORTD_DIR_R = 0x00;          // 9) PD6-PD7 input
+}
+
+
 // -----------------X Direction --------------------- //
 //---------------- PB5-ADC0-Seq3 ---------------------//
 void ADC0_InitSWTriggerSeq3_Ch11(void){
@@ -180,7 +196,9 @@ void SysTick_Handler(void){
 
 // Jostick initialization
 void joystick_Init(){
+    PortD_Init();                   // 1) Enable PortD
     PortE_Init();                   // 1) Enable PortE
+
     GPIO_PORTE_DATA_R = 0x10;       // 2) Enable joystick PE4
     ADC0_InitSWTriggerSeq3_Ch11();  // 3) Configure PB5 (X direction) as ADC
     ADC0_InitSWTriggerSeq2_Ch4();   // 4) Configure PD3 (Y direction) as ADC
@@ -227,9 +245,29 @@ int main(){
     SerialWriteLine("Reset Now");
 
     joystick_Init();
+    bool button1 = false; //The upper button on the board
+    bool button2 = false; //The lower button on the board
 
     UART7_Init();
     //configMaster();
+
+    while(1){
+        if((GPIO_PORTD_DATA_R & 0x40) == 0){
+            button1 = true;
+            SysTick_Wait10ms(1);
+        } else if(button1){
+            UART7_send("1");
+            button1 = false;
+        }
+
+        if((GPIO_PORTD_DATA_R & 0x80) == 0){
+            button2 = true;
+            SysTick_Wait10ms(1);
+        } else if(button2){
+            UART7_send("2");
+            button2 = false;
+        }
+    }
 
     return 0;
 }
