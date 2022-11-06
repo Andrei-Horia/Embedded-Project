@@ -71,7 +71,7 @@ void PWM_Init(uint16_t period, uint16_t duty) {
 
     //GPIO_PORTB_ODR_R |= (1<<6);         // PA7 Open Drain Enable
     //GPIO_PORTB_DR4R_R |= (1<<6);        // PA7 4mA drive enable, since
-    // Set PCTL Register PMC7 and PMC6 to 0x04
+    // Set PCTL Register PMC7 3nand PMC6 to 0x04
 
     PWM0_0_CTL_R = 0x00;
     PWM0_0_GENA_R |= 0x8C;      // Settings for pwmA
@@ -185,6 +185,7 @@ void configSlave(){
 //Function to position servo_motor at specific position.
 //The function takes a single step towards that direction.
 //dir = 1/0/-1
+/*
 int position_servo(int curr_pos, int dir){
     if(7 <= curr_pos + dir && curr_pos + dir <= 23){
         curr_pos += dir;
@@ -196,6 +197,25 @@ int position_servo(int curr_pos, int dir){
 
     return curr_pos;
 }
+*/
+
+
+//Tiny Servo set on PE4
+//Function to position servo_motor at specific position.
+//The function takes a single step towards that direction.
+//dir = 1/0/-1
+int position_servo(int curr_pos, int dir){
+    if(10 <= curr_pos + dir && curr_pos + dir <= 20){
+        curr_pos += dir;
+        GPIO_PORTE_DATA_R |= 0x30;
+        SysTick_Wait100microsec(curr_pos);
+        GPIO_PORTE_DATA_R &= ~0x30;
+        SysTick_Wait100microsec(170-curr_pos);
+    }
+
+    return curr_pos;
+}
+
 
 
 void SysTickInterrupt_Init() {
@@ -254,6 +274,10 @@ int main(void)
 
     SetupSerial();
     SerialWriteLine("Start");
+
+    UART7_Init();
+    //configSlave();
+
     Timer1A_Init();
 
     /*
@@ -282,11 +306,9 @@ int main(void)
     }
     */
 
-    UART7_Init();
-    //configSlave();
 
     int dir = 0;
-    int curr_pos = 14;
+    int curr_pos = 15;
     int duty = 4096;
 
     GPIO_PORTE_DATA_R |= 0x08;
@@ -298,13 +320,15 @@ int main(void)
         if(data[0] == 'L') dir = -1;
         if(data[0] == 'R') dir = 1;
 
+
         if(data[0] == 'X'){
             dir = 0;
-            if(curr_pos > 15)
+            if(curr_pos > 16)
                 dir = -1;
             if(curr_pos < 14)
                 dir = 1;
         }
+
 
         if(dir != 0)
             curr_pos = position_servo(curr_pos, dir);
@@ -318,7 +342,6 @@ int main(void)
             duty = duty * 4;
             PWM0_Duty(duty);
         }
-
     }
 
 	return 0;
