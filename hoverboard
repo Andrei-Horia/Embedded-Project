@@ -18,6 +18,37 @@ void PLLInit()
 }
 
 
+// Used for motor driver: PD2, PD3
+void PortB_Init(void) {
+    volatile unsigned long delay;
+    SYSCTL_RCGC2_R |= 0x00000002;     // 1) B clock
+    delay = SYSCTL_RCGC2_R; // reading register adds a delay, which we might need
+    GPIO_PORTB_LOCK_R = 0x4C4F434B;   // 2) unlock PortB
+    GPIO_PORTB_CR_R = 0x04;           // 3) allow changes to PB2
+    GPIO_PORTB_AMSEL_R = 0x00;        // 4) disable analog function
+    GPIO_PORTB_AFSEL_R = 0x00;        // 5) no alternate function
+    GPIO_PORTB_PCTL_R = 0x00000000;   // 6) GPIO clear bit PCTL
+    GPIO_PORTB_PDR_R = 0x00;          // 7) disable pulldown resistors on PB2
+    GPIO_PORTB_DEN_R = 0x04;          // 8) enable digital pins PB2
+    GPIO_PORTB_DIR_R = 0x04;          // 9) PB2 output
+}
+
+
+// Used for motor driver: PD2, PD3
+void PortD_Init(void) {
+    volatile unsigned long delay;
+    SYSCTL_RCGC2_R |= 0x00000008;     // 1) D clock
+    delay = SYSCTL_RCGC2_R; // reading register adds a delay, which we might need
+    GPIO_PORTD_LOCK_R = 0x4C4F434B;   // 2) unlock PortD
+    GPIO_PORTD_CR_R = 0x0E;           // 3) allow changes to PD2-PD3
+    GPIO_PORTD_AMSEL_R = 0x00;        // 4) disable analog function
+    GPIO_PORTD_AFSEL_R = 0x00;        // 5) no alternate function
+    GPIO_PORTD_PCTL_R = 0x00000000;   // 6) GPIO clear bit PCTL
+    GPIO_PORTD_PDR_R = 0x00;          // 7) disable pulldown resistors on PD2-PD3
+    GPIO_PORTD_DEN_R = 0x0E;          // 8) enable digital pins PD2-PD3
+    GPIO_PORTD_DIR_R = 0x0E;          // 9) PD2-PD3 output
+}
+
 // Used for servo motor: PE4, PE5
 // Used for motor driver: PE2, PE3
 void PortE_Init(void) {
@@ -29,11 +60,10 @@ void PortE_Init(void) {
     GPIO_PORTE_AMSEL_R = 0x00;        // 4) disable analog function
     GPIO_PORTE_AFSEL_R = 0x00;        // 5) no alternate function
     GPIO_PORTE_PCTL_R = 0x00000000;   // 6) GPIO clear bit PCTL
-    GPIO_PORTE_PDR_R = 0x00;          // 7) disable pulldown resistors on PE4-PE5
+    GPIO_PORTE_PDR_R = 0x00;          // 7) disable pulldown resistors on PE2-PE5
     GPIO_PORTE_DEN_R = 0x3C;          // 8) enable digital pins PE2-PE5
     GPIO_PORTE_DIR_R = 0x3C;          // 9) PE2-PE5 output
 }
-
 
 void PortF_Init(void) {
     volatile unsigned long delay;
@@ -51,22 +81,23 @@ void PortF_Init(void) {
 
 
 
+
+
 // Used for DC motors: PB6-PB7
 void PWM_Init(uint16_t period, uint16_t duty) {
     volatile unsigned long delay;
 
     SYSCTL_RCC_R |= 0x00100000;       // USEPWMDIV set to 1
-    SYSCTL_RCC_R &= ~0x000E0000;  // PWMDIV set to 2
+    SYSCTL_RCC_R &= ~0x000E0000;      // PWMDIV set to 2
     SYSCTL_RCGC0_R |= 0x00100000;     // Enable Clock for PWM Module
-
     SYSCTL_RCGC2_R |= 0x00000002;     // Port B clock gating control
     delay = SYSCTL_RCGC2_R;           // delay
 
-    GPIO_PORTB_CR_R |= 0xC0;          // allow changes to PB6-7
+    GPIO_PORTB_CR_R |= 0xC0;      // allow changes to PB6-7
     GPIO_PORTB_AMSEL_R &= 0x00;   // disable analog function
-    GPIO_PORTB_DEN_R |= 0xC0;         // Enable Digital Pins
+    GPIO_PORTB_DEN_R |= 0xC0;     // Enable Digital Pins
     GPIO_PORTB_DIR_R |= 0xC0;     // Direction Output
-    GPIO_PORTB_AFSEL_R |= 0xC0;       // PWM alternate function on PB6-7
+    GPIO_PORTB_AFSEL_R |= 0xC0;   // PWM alternate function on PB6-7
     GPIO_PORTB_PCTL_R = (GPIO_PORTB_PCTL_R&0x00FFFFFF)+0x44000000;
 
     //GPIO_PORTB_ODR_R |= (1<<6);         // PA7 Open Drain Enable
@@ -75,18 +106,22 @@ void PWM_Init(uint16_t period, uint16_t duty) {
 
     PWM0_0_CTL_R = 0x00;
     PWM0_0_GENA_R |= 0x8C;      // Settings for pwmA
-    PWM0_0_GENB_R |= 0x80C;      // Settings for pwmB
+    PWM0_0_GENB_R |= 0x80C;     // Settings for pwmB
     PWM0_0_LOAD_R = period - 1;
 
     PWM0_0_CMPA_R = duty - 1;
     PWM0_0_CMPB_R = duty - 1;
 
     PWM0_0_CTL_R |= 0x00000001;       // PWM Gen0 Timers Start
-    PWM0_ENABLE_R |= 0x00000001;      // PWM Output Enable
+    PWM0_ENABLE_R |= 0x00000003;      // PWM Output Enable
 }
 
-void PWM0_Duty(uint16_t duty){
+void PWM0A_Duty(uint16_t duty){
     PWM0_0_CMPA_R = duty - 1;
+}
+
+void PWM0B_Duty(uint16_t duty){
+    PWM0_0_CMPB_R = duty - 1;
 }
 
 //Used for UART: PE0, PE1
@@ -107,36 +142,6 @@ void UART7_Init(void){
 }
 
 
-void ultrasonic_send(void){
-    SYSCTL_RCGC2_R |= 0x00000020;     // 1) E clock
-    GPIO_PORTF_LOCK_R = 0x4C4F434B;   // 2) unlock PortE
-    GPIO_PORTF_CR_R = 0x01;           // 3) allow changes to PE4-PE5
-    GPIO_PORTF_AMSEL_R = 0x00;        // 4) disable analog function
-    GPIO_PORTF_AFSEL_R = 0x00;        // 5) no alternate function
-    GPIO_PORTF_PCTL_R = 0x00000000;   // 6) GPIO clear bit PCTL
-    GPIO_PORTF_PUR_R = 0x01;          // 7) disable pulldown resistors on PE4-PE5
-    GPIO_PORTF_DEN_R = 0x01;          // 8) enable digital pins PE4-PE5
-    GPIO_PORTF_DIR_R = 0x01;          // 9) PE4-PE5 output
-
-    GPIO_PORTF_DATA_R |= 0x01;
-
-    SysTick_Wait10microsec(1);
-    SerialWriteLine("Sent");
-
-    GPIO_PORTF_DATA_R |= 0x00;
-    PortF_Init();
-}
-
-
-
-int First = 0;
-void Timer1A_Handler(void){
-    SerialWriteLine("Orun");
-
-    TIMER1_ICR_R = 0x00000004; // acknowledge the interrupt
-}
-
-
 char UART7_recv(void){
     while((UART7_FR_R & 0x10) != 0);
     return ((char)(UART7_DR_R & 0xFF));
@@ -152,6 +157,88 @@ void UART7_send(char* data) {
         UART7_send_char(*data++);
     }
 }
+
+
+
+void SysTickInterrupt_Init() {
+    NVIC_ST_CTRL_R = 0;
+    NVIC_ST_RELOAD_R = 80000; // 2 ms
+    NVIC_ST_CURRENT_R = 0;
+    NVIC_ST_CTRL_R = 0x00000007;
+}
+
+
+int dist;
+int dir = 0; // Change back to 0 when done
+int count = 0;
+int servo_per = 0;
+int curr_pos = 15;
+bool shd_move = false;
+bool available = false;
+void SysTick_Handler(void){
+    count++;
+    servo_per++;
+
+    /*
+    if(shd_move){
+        if(10 * curr_pos >= servo_per){
+            GPIO_PORTE_DATA_R |= 0x30;
+        }
+        else
+            GPIO_PORTE_DATA_R &= ~0x30;
+    }
+
+    if(shd_move && servo_per == 2000)
+        shd_move = false;
+    */
+
+    servo_per %= 2000;
+    count %= 50000;
+}
+
+void Timer1A_Handler(void){
+    // Acknowledge the interrupt
+    TIMER1_CTL_R = 0x00;
+    TIMER1_ICR_R = 0x00000004;
+
+    // Compute distance
+    int top = 0x00FF3F1A;
+    int exp = TIMER1_TAR_R;
+    dist = ((top - exp) / (1 << (int)(top / (exp >> 1))) / (200 * (1 << (int)(top / (exp >> 1)))));
+
+    // Close timer for accuracy of data
+    GPIO_PORTB_AFSEL_R &= ~0x10;
+    GPIO_PORTB_PCTL_R &= ~0x000F0000;
+    SYSCTL_RCGCTIMER_R &= ~0x02;
+
+    // Set distance availability
+    available = true;
+}
+
+void ultrasonic_send(void){
+    SYSCTL_RCGC2_R |= 0x00000008;     // 1) E clock
+    GPIO_PORTB_LOCK_R = 0x4C4F434B;   // 2) unlock PortE
+    GPIO_PORTB_CR_R = 0x10;           // 3) allow changes to PE4-PE5
+    GPIO_PORTB_AMSEL_R &= ~0x10;        // 4) disable analog function
+    GPIO_PORTB_AFSEL_R &= ~0x10;        // 5) no alternate function
+    GPIO_PORTB_PCTL_R &= ~0x000F0000;   // 6) GPIO clear bit PCTL
+    GPIO_PORTB_PUR_R |= 0x00;          // 7) disable pulldown resistors on PE4-PE5
+    GPIO_PORTB_DEN_R |= 0x10;          // 8) enable digital pins PE4-PE5
+    GPIO_PORTB_DIR_R |= 0x10;          // 9) PE4-PE5 output
+    GPIO_PORTB_DATA_R |= 0x10;
+
+    count = 0;
+    NVIC_ST_CURRENT_R = 0;
+
+    // Wait 10 microseconds
+    int i;
+    for(i=0;i<800;i++){};
+
+    GPIO_PORTB_DATA_R &= ~0x10;
+    Timer1A_Init();
+}
+
+
 
 
 void configSlave(){
@@ -180,14 +267,13 @@ void configSlave(){
     SerialWriteLine("Protocol Done");
 }
 
-
+/*
 //Servo set on PE4
 //Function to position servo_motor at specific position.
 //The function takes a single step towards that direction.
 //dir = 1/0/-1
-/*
 int position_servo(int curr_pos, int dir){
-    if(7 <= curr_pos + dir && curr_pos + dir <= 23){
+    if(10 <= curr_pos + dir && curr_pos + dir <= 20){
         curr_pos += dir;
         GPIO_PORTE_DATA_R |= 0x30;
         SysTick_Wait100microsec(curr_pos);
@@ -205,12 +291,12 @@ int position_servo(int curr_pos, int dir){
 //The function takes a single step towards that direction.
 //dir = 1/0/-1
 int position_servo(int curr_pos, int dir){
-    if(10 <= curr_pos + dir && curr_pos + dir <= 20){
+    if(9 <= curr_pos + dir && curr_pos + dir <= 21){
         curr_pos += dir;
         GPIO_PORTE_DATA_R |= 0x30;
         SysTick_Wait100microsec(curr_pos);
         GPIO_PORTE_DATA_R &= ~0x30;
-        SysTick_Wait100microsec(170-curr_pos);
+        SysTick_Wait100microsec(150-curr_pos);
     }
 
     return curr_pos;
@@ -218,20 +304,9 @@ int position_servo(int curr_pos, int dir){
 
 
 
-void SysTickInterrupt_Init() {
-    NVIC_ST_CTRL_R = 0;
-    NVIC_ST_RELOAD_R = 795; // < 10 ms
-    NVIC_ST_CURRENT_R = 0;
-    NVIC_ST_CTRL_R = 0x00000007;
-}
 
 
-bool ultra = false;
-void SysTick_Handler(void){
-    ultra = true;
-}
-
-
+//PB4 timer for ultrasonic
 void Timer1A_Init(){
     SYSCTL_RCGCTIMER_R |= 0x02; // Activate Timer 0
     SYSCTL_RCGCGPIO_R |= 0x02;  // Activate Port B
@@ -244,12 +319,12 @@ void Timer1A_Init(){
     TIMER1_CFG_R = 0x00000004;      // Configure for 16-bit capture mode
     TIMER1_TAMR_R = 0x00000007;     // Edge time mode and capture mode
     TIMER1_CTL_R &= ~0x0000000C;    // configure for both edges
-    TIMER1_TAILR_R = 0x0000FFFF;    // Start value for count down
-    TIMER1_TAPR_R = 0xFF;          // Activate pre-scale (24-bit timer)
+    TIMER1_TAILR_R = 0x00FFFFFF;    // Start value for count down
+    TIMER1_TAPR_R = 0xFF;            // Activate pre-scale (24-bit timer)
     TIMER1_IMR_R |= 0x00000004;     // Enable Input capture interrupts
-    TIMER1_CTL_R |= 0x00000003;     // Timer 0A 24-bit, rising edge
+    TIMER1_CTL_R |= 0x00000007;     // Timer 0A 24-bit, rising edge
 
-    NVIC_PRI5_R = (NVIC_PRI5_R&0xFFFF00FF) | 0x00004000;
+    NVIC_PRI5_R = (NVIC_PRI5_R&0xFFFF00FF) | 0x00040000;
     NVIC_EN0_R = 1<<21;
 }
 
@@ -265,84 +340,128 @@ int main(void)
 {
     //int i;
     PLLInit();
+    SetupSerial();
+    SerialWriteLine("Start");
+
+    //PortB_Init();
+    PortD_Init();
     PortE_Init();
-    //PortF_Init();
+    PortF_Init();
 
     SystickInit();
     SysTickInterrupt_Init();
-    PWM_Init(4097, 4096);
-
-    SetupSerial();
-    SerialWriteLine("Start");
+    PWM_Init(4001, 4000);
 
     UART7_Init();
     //configSlave();
 
-    Timer1A_Init();
+    count = 0;
+    int avg = 0;
+    int cnt = 0;
+    int duty = 4000;
+    int lower_duty = 4000;
 
-    /*
-    ultrasonic_send();
+    // Configure DC motor output pins (CCW rotation)
+    GPIO_PORTD_DATA_R |= 0x08;      // a) lower motors
+    GPIO_PORTE_DATA_R |= 0x08;      // b) direction motor
 
-    ultra = false;
-    while(1){
-        GPIO_PORTF_DIR_R = 0x01;
-        GPIO_PORTF_DATA_R = 0x01;
-
-        if(ultra){
-            ultra = false;
-            GPIO_PORTF_DIR_R = 0x00;
-            GPIO_PORTF_DATA_R = 0x00;
-            SerialWriteLine("Reached");
-            while(1){
-
-                if(GPIO_PORTF_DATA_R & 0x01){
-                    SerialWriteLine("From ultra");
-                }
-            }
-
-        }
-
-
-    }
-    */
-
-
-    int dir = 0;
-    int curr_pos = 15;
-    int duty = 4096;
-
-    GPIO_PORTE_DATA_R |= 0x08;
     while(1){
         char data[2] = {0,0};
+
         data[0] = UART7_recv();
-        SerialWrite(data);
+        //SerialWriteLine(data);
 
-        if(data[0] == 'L') dir = -1;
-        if(data[0] == 'R') dir = 1;
-
-
+        // Read Bluetooth module - dead position
         if(data[0] == 'X'){
             dir = 0;
-            if(curr_pos > 16)
+            if(curr_pos >= 16)
                 dir = -1;
-            if(curr_pos < 14)
+            if(curr_pos <= 14)
                 dir = 1;
         }
 
+        // Read Bluetooth module - left position
+        if(data[0] == 'L') dir = -1;
 
-        if(dir != 0)
+        // Read Bluetooth module - right position
+        if(data[0] == 'R') dir = 1;
+
+        //if(!shd_move && dir == 1 && curr_pos < 20){shd_move = true; curr_pos++;}
+        //if(!shd_move && dir == -1 && curr_pos > 10){ shd_move = true; curr_pos--;}
+
+        if(dir == 1){ curr_pos++; }
+        if(dir == -1){ curr_pos--; }
+
+        //Update servo w.r.t. position
+        if(dir != 0){
             curr_pos = position_servo(curr_pos, dir);
-
-        if(data[0] == '1' && duty >= 4){
-            duty = duty / 4;
-            PWM0_Duty(duty);
         }
 
-        if(data[0] == '2' && duty < 4096){
-            duty = duty * 4;
-            PWM0_Duty(duty);
+        // Give lower motor power
+        if(data[0] == 'U' && lower_duty >= 10){
+            lower_duty -= 10;
+            PWM0B_Duty(lower_duty);
+        }
+
+        // Reduce lower motor power
+        if(data[0] == 'D' && lower_duty <= 3990){
+            lower_duty += 10;
+            PWM0B_Duty(lower_duty);
+        }
+
+
+        // Read Bluetooth module - button 1 clicked
+        if(data[0] == '1' && duty >= 200){
+
+            // Increase speed of DC motor by reducing duty-cycle.
+            duty = duty - 200;
+            PWM0A_Duty(duty);
+        }
+
+        // Read Bluetooth module - button 2 clicked
+        if(data[0] == '2' && duty <= 3800){
+
+            // Decrese speed of DC motor by adding duty-cycle.
+            duty = duty + 200;
+            PWM0A_Duty(duty);
+        }
+
+
+        // Activate ultrasonic
+        if(count >= 100){
+            count = 0;
+            ultrasonic_send();
+            available = false;
+        }
+
+
+        // Distance was processed
+        if(available){
+            cnt++;
+            available = false;
+            avg +=  dist;
+
+            // Create linear function for decreasing speed
+            // if objects are nearby
+            if(cnt == 5 && (avg / 5) <= 40){
+                if(avg / 5 < 10){
+                    duty = 3800;
+                    PWM0A_Duty(duty);
+                }
+                else{
+                    duty = 4000 - 40 * (avg / 5);
+                    PWM0A_Duty(duty);
+                }
+            }
+
+            if(cnt == 5){
+                SerialWriteInt(avg / 5);
+                avg = 0;
+                cnt = 0;
+            }
         }
     }
+
 
 	return 0;
 }
