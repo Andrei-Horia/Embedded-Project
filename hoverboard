@@ -18,19 +18,19 @@ void PLLInit()
 }
 
 
-// Used for motor driver: PD2, PD3
+// Used for motor driver: PB2, PB3
 void PortB_Init(void) {
     volatile unsigned long delay;
     SYSCTL_RCGC2_R |= 0x00000002;     // 1) B clock
     delay = SYSCTL_RCGC2_R; // reading register adds a delay, which we might need
     GPIO_PORTB_LOCK_R = 0x4C4F434B;   // 2) unlock PortB
-    GPIO_PORTB_CR_R = 0x04;           // 3) allow changes to PB2
+    GPIO_PORTB_CR_R = 0x0C;           // 3) allow changes to PB2
     GPIO_PORTB_AMSEL_R = 0x00;        // 4) disable analog function
     GPIO_PORTB_AFSEL_R = 0x00;        // 5) no alternate function
     GPIO_PORTB_PCTL_R = 0x00000000;   // 6) GPIO clear bit PCTL
     GPIO_PORTB_PDR_R = 0x00;          // 7) disable pulldown resistors on PB2
-    GPIO_PORTB_DEN_R = 0x04;          // 8) enable digital pins PB2
-    GPIO_PORTB_DIR_R = 0x04;          // 9) PB2 output
+    GPIO_PORTB_DEN_R = 0x0C;          // 8) enable digital pins PB2-PB3
+    GPIO_PORTB_DIR_R = 0x0C;          // 9) PB2-PB3 output
 }
 
 
@@ -100,10 +100,6 @@ void PWM_Init(uint16_t period, uint16_t duty) {
     GPIO_PORTB_AFSEL_R |= 0xC0;   // PWM alternate function on PB6-7
     GPIO_PORTB_PCTL_R = (GPIO_PORTB_PCTL_R&0x00FFFFFF)+0x44000000;
 
-    //GPIO_PORTB_ODR_R |= (1<<6);         // PA7 Open Drain Enable
-    //GPIO_PORTB_DR4R_R |= (1<<6);        // PA7 4mA drive enable, since
-    // Set PCTL Register PMC7 3nand PMC6 to 0x04
-
     PWM0_0_CTL_R = 0x00;
     PWM0_0_GENA_R |= 0x8C;      // Settings for pwmA
     PWM0_0_GENB_R |= 0x80C;     // Settings for pwmB
@@ -172,7 +168,7 @@ int dist;
 int dir = 0; // Change back to 0 when done
 int count = 0;
 int servo_per = 0;
-int curr_pos = 15;
+int curr_pos = 20;
 bool shd_move = false;
 bool available = false;
 void SysTick_Handler(void){
@@ -291,12 +287,12 @@ int position_servo(int curr_pos, int dir){
 //The function takes a single step towards that direction.
 //dir = 1/0/-1
 int position_servo(int curr_pos, int dir){
-    if(9 <= curr_pos + dir && curr_pos + dir <= 21){
+    if(10 <= curr_pos + dir && curr_pos + dir <= 20){
         curr_pos += dir;
         GPIO_PORTE_DATA_R |= 0x30;
         SysTick_Wait100microsec(curr_pos);
         GPIO_PORTE_DATA_R &= ~0x30;
-        SysTick_Wait100microsec(150-curr_pos);
+        SysTick_Wait100microsec(180-curr_pos);
     }
 
     return curr_pos;
@@ -343,7 +339,7 @@ int main(void)
     SetupSerial();
     SerialWriteLine("Start");
 
-    //PortB_Init();
+    PortB_Init();
     PortD_Init();
     PortE_Init();
     PortF_Init();
@@ -363,20 +359,20 @@ int main(void)
 
     // Configure DC motor output pins (CCW rotation)
     GPIO_PORTD_DATA_R |= 0x08;      // a) lower motors
-    GPIO_PORTE_DATA_R |= 0x08;      // b) direction motor
+    GPIO_PORTB_DATA_R |= 0x08;      // b) direction motor
 
     while(1){
         char data[2] = {0,0};
 
         data[0] = UART7_recv();
-        //SerialWriteLine(data);
+        SerialWriteLine(data);
 
         // Read Bluetooth module - dead position
         if(data[0] == 'X'){
             dir = 0;
-            if(curr_pos >= 16)
+            if(curr_pos > 16)
                 dir = -1;
-            if(curr_pos <= 14)
+            if(curr_pos < 14)
                 dir = 1;
         }
 
@@ -389,12 +385,10 @@ int main(void)
         //if(!shd_move && dir == 1 && curr_pos < 20){shd_move = true; curr_pos++;}
         //if(!shd_move && dir == -1 && curr_pos > 10){ shd_move = true; curr_pos--;}
 
-        if(dir == 1){ curr_pos++; }
-        if(dir == -1){ curr_pos--; }
-
         //Update servo w.r.t. position
         if(dir != 0){
             curr_pos = position_servo(curr_pos, dir);
+            SerialWriteInt(curr_pos);
         }
 
         // Give lower motor power
@@ -428,7 +422,7 @@ int main(void)
 
 
         // Activate ultrasonic
-        if(count >= 100){
+        if(count >= 150){
             count = 0;
             ultrasonic_send();
             available = false;
@@ -444,15 +438,24 @@ int main(void)
             // Create linear function for decreasing speed
             // if objects are nearby
             if(cnt == 5 && (avg / 5) <= 40){
-                if(avg / 5 < 10){
-                    duty = 3800;
+                if(avg / 5 < 5){
+                    // Make motor spin backwards
+                    GPIO_PORTB_DATA_R |= 0x04;
+                    duty = 2000;
+                    PWM0A_Duty(duty);
+                } else if(avg / 5 < 10){
+                    duty = 3600;
                     PWM0A_Duty(duty);
                 }
                 else{
-                    duty = 4000 - 40 * (avg / 5);
+                    duty = 4000 - 50 * (avg / 5);
                     PWM0A_Duty(duty);
                 }
             }
+
+            // Make motors move forward again
+            if(cnt == 5 && (avg / 5) > 40)
+                GPIO_PORTB_DATA_R |= 0x08;
 
             if(cnt == 5){
                 SerialWriteInt(avg / 5);
